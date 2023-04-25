@@ -1,3 +1,4 @@
+// Package main provides a JWT authentication middleware for Traefik.
 package main
 
 import (
