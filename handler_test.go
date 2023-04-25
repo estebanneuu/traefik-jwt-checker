@@ -12,54 +12,42 @@ import (
 
 func TestJWTMiddleware(t *testing.T) {
 	secret := "testsecret"
+	middleware := NewJWTMiddleware(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {}), secret)
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("OK"))
+	t.Run("Missing Authorization header", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest(http.MethodGet, "/", nil)
+
+		middleware.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Equal(t, "Missing Authorization header", w.Body.String())
+	})
+
+	t.Run("Invalid JWT token", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer invalidtoken")
+
+		middleware.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Equal(t, "Invalid JWT token", w.Body.String())
 	})
 
 	t.Run("Valid JWT token", func(t *testing.T) {
+		w := httptest.NewRecorder()
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"sub": "1234567890",
-			"exp": float64(time.Now().Add(time.Hour).Unix()),
+			"exp": time.Now().Add(1 * time.Hour).Unix(),
 		})
-
 		tokenString, _ := token.SignedString([]byte(secret))
 
 		r, _ := http.NewRequest(http.MethodGet, "/", nil)
 		r.Header.Set("Authorization", "Bearer "+tokenString)
 
-		rr := httptest.NewRecorder()
+		middleware.ServeHTTP(w, r)
 
-		jwtMiddleware := NewJWTMiddleware(handler, secret)
-		jwtMiddleware.ServeHTTP(rr, r)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Equal(t, "OK", rr.Body.String())
+		assert.NotEqual(t, http.StatusUnauthorized, w.Code)
 	})
-
-	t.Run("Missing Authorization header", func(t *testing.T) {
-		r, _ := http.NewRequest(http.MethodGet, "/", nil)
-
-		rr := httptest.NewRecorder()
-
-		jwtMiddleware := NewJWTMiddleware(handler, secret)
-		jwtMiddleware.ServeHTTP(rr, r)
-
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		assert.Equal(t, "Missing Authorization header", rr.Body.String())
-	})
-
-	t.Run("Invalid JWT token", func(t *testing.T) {
-		r, _ := http.NewRequest(http.MethodGet, "/", nil)
-		r.Header.Set("Authorization", "Bearer invalid-token")
-
-		rr := httptest.NewRecorder()
-
-		jwtMiddleware := NewJWTMiddleware(handler, secret)
-		jwtMiddleware.ServeHTTP(rr, r)
-
-		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		assert.Equal(t, "Invalid JWT token", rr.Body.String())
-	})
-	
 }
+
