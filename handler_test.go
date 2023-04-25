@@ -25,35 +25,41 @@ func TestJWTMiddleware(t *testing.T) {
 
 		tokenString, _ := token.SignedString([]byte(secret))
 
-		r, _ := http.NewRequest("GET", "/", nil)
-		r.Header.Add("Authorization", "Bearer "+tokenString)
+		r, _ := http.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tokenString)
 
-		w := httptest.NewRecorder()
-		middleware := NewJWTMiddleware(handler, secret)
-		middleware.ServeHTTP(w, r)
+		rr := httptest.NewRecorder()
 
-		assert.Equal(t, http.StatusOK, w.Code)
+		jwtMiddleware := NewJWTMiddleware(handler, secret)
+		jwtMiddleware.ServeHTTP(rr, r)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "OK", rr.Body.String())
 	})
 
 	t.Run("Missing Authorization header", func(t *testing.T) {
-		r, _ := http.NewRequest("GET", "/", nil)
+		r, _ := http.NewRequest(http.MethodGet, "/", nil)
 
-		w := httptest.NewRecorder()
-		middleware := NewJWTMiddleware(handler, secret)
-		middleware.ServeHTTP(w, r)
+		rr := httptest.NewRecorder()
 
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		jwtMiddleware := NewJWTMiddleware(handler, secret)
+		jwtMiddleware.ServeHTTP(rr, r)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		assert.Equal(t, "Missing Authorization header", rr.Body.String())
 	})
 
 	t.Run("Invalid JWT token", func(t *testing.T) {
-		r, _ := http.NewRequest("GET", "/", nil)
-		r.Header.Add("Authorization", "Bearer invalid-token")
+		r, _ := http.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer invalid-token")
 
-		w := httptest.NewRecorder()
-		middleware := NewJWTMiddleware(handler, secret)
-		middleware.ServeHTTP(w, r)
+		rr := httptest.NewRecorder()
 
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		jwtMiddleware := NewJWTMiddleware(handler, secret)
+		jwtMiddleware.ServeHTTP(rr, r)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		assert.Equal(t, "Invalid JWT token", rr.Body.String())
 	})
 
 	t.Run("Expired JWT token", func(t *testing.T) {
@@ -64,13 +70,15 @@ func TestJWTMiddleware(t *testing.T) {
 
 		tokenString, _ := token.SignedString([]byte(secret))
 
-		r, _ := http.NewRequest("GET", "/", nil)
-		r.Header.Add("Authorization", "Bearer "+tokenString)
+		r, _ := http.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tokenString)
 
-		w := httptest.NewRecorder()
-		middleware := NewJWTMiddleware(handler, secret)
-		middleware.ServeHTTP(w, r)
+		rr := httptest.NewRecorder()
 
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		jwtMiddleware := NewJWTMiddleware(handler, secret)
+		jwtMiddleware.ServeHTTP(rr, r)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		assert.Equal(t, "JWT token has expired", rr.Body.String())
 	})
 }
