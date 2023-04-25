@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/traefik/yaegi/interp"
@@ -27,7 +28,7 @@ func (j *JWTMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	header := req.Header.Get("Authorization")
 	if header == "" {
 		rw.WriteHeader(http.StatusUnauthorized)
-		rw.Write([]byte("Missing Authorization header"))
+		_, _ = rw.Write([]byte("Missing Authorization header"))
 		return
 	}
 
@@ -41,7 +42,28 @@ func (j *JWTMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if err != nil || !token.Valid {
 		rw.WriteHeader(http.StatusUnauthorized)
-		rw.Write([]byte("Invalid JWT token"))
+		_, _ = rw.Write([]byte("Invalid JWT token"))
+		return
+	}
+
+	// Check if the token has expired
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		_, _ = rw.Write([]byte("Invalid JWT claims"))
+		return
+	}
+
+	expiration, ok := claims["exp"].(float64)
+	if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		_, _ = rw.Write([]byte("Invalid JWT expiration"))
+		return
+	}
+
+	if time.Now().Unix() > int64(expiration) {
+		rw.WriteHeader(http.StatusUnauthorized)
+		_, _ = rw.Write([]byte("JWT token has expired"))
 		return
 	}
 
@@ -50,8 +72,8 @@ func (j *JWTMiddleware) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func main() {
 	i := interp.New(interp.Options{})
-	i.Use(stdlib.Symbols)
-	i.Use(unsafe.Symbols)
+	_ = i.Use(stdlib.Symbols)
+	_ = i.Use(unsafe.Symbols)
 
 	_, err := i.Eval(`import "fmt"`)
 

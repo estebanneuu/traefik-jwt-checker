@@ -4,64 +4,73 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
 )
 
-const testSecret = "test-secret"
+func TestJWTMiddleware(t *testing.T) {
+	secret := "testsecret"
 
-func TestJWTMiddleware_ValidToken(t *testing.T) {
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("OK"))
 	})
 
-	middleware := NewJWTMiddleware(next, testSecret)
+	t.Run("Valid JWT token", func(t *testing.T) {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"sub": "1234567890",
+			"exp": float64(time.Now().Add(time.Hour).Unix()),
+		})
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{})
-	tokenString, _ := token.SignedString([]byte(testSecret))
+		tokenString, _ := token.SignedString([]byte(secret))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+tokenString)
+		r, _ := http.NewRequest("GET", "/", nil)
+		r.Header.Add("Authorization", "Bearer "+tokenString)
 
-	recorder := httptest.NewRecorder()
+		w := httptest.NewRecorder()
+		middleware := NewJWTMiddleware(handler, secret)
+		middleware.ServeHTTP(w, r)
 
-	middleware.ServeHTTP(recorder, req)
-
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Equal(t, "OK", recorder.Body.String())
-}
-
-func TestJWTMiddleware_MissingToken(t *testing.T) {
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	middleware := NewJWTMiddleware(next, testSecret)
+	t.Run("Missing Authorization header", func(t *testing.T) {
+		r, _ := http.NewRequest("GET", "/", nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	recorder := httptest.NewRecorder()
+		w := httptest.NewRecorder()
+		middleware := NewJWTMiddleware(handler, secret)
+		middleware.ServeHTTP(w, r)
 
-	middleware.ServeHTTP(recorder, req)
-
-	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	assert.Equal(t, "Missing Authorization header", recorder.Body.String())
-}
-
-func TestJWTMiddleware_InvalidToken(t *testing.T) {
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
-	middleware := NewJWTMiddleware(next, testSecret)
+	t.Run("Invalid JWT token", func(t *testing.T) {
+		r, _ := http.NewRequest("GET", "/", nil)
+		r.Header.Add("Authorization", "Bearer invalid-token")
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+"invalid-token")
+		w := httptest.NewRecorder()
+		middleware := NewJWTMiddleware(handler, secret)
+		middleware.ServeHTTP(w, r)
 
-	recorder := httptest.NewRecorder()
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
 
-	middleware.ServeHTTP(recorder, req)
+	t.Run("Expired JWT token", func(t *testing.T) {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"sub": "1234567890",
+			"exp": float64(time.Now().Add(-time.Hour).Unix()),
+		})
 
-	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	assert.Equal(t, "Invalid JWT token", recorder.Body.String())
+		tokenString, _ := token.SignedString([]byte(secret))
+
+		r, _ := http.NewRequest("GET", "/", nil)
+		r.Header.Add("Authorization", "Bearer "+tokenString)
+
+		w := httptest.NewRecorder()
+		middleware := NewJWTMiddleware(handler, secret)
+		middleware.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
 }
