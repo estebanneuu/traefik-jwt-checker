@@ -1,3 +1,3 @@
-module github.com/traefik/plugindemo
+module github.com/estebanneuu/traefik-jwt-checker
 
 go 1.19
